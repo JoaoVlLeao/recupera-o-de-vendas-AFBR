@@ -220,6 +220,8 @@ async function gerarRespostaGemini(historico, dados) {
 }
 
 // ======================= CLIENTE WHATSAPP =======================
+let qrCodeData = null; // Variável para armazenar o QR Code atual
+
 const client = new Client({
     authStrategy: new LocalAuth({ dataPath: DATA_DIR }),
     puppeteer: {
@@ -228,8 +230,17 @@ const client = new Client({
     }
 });
 
-client.on('qr', (qr) => qrcode.generate(qr, { small: true }));
-client.on('ready', () => console.log('✅ Bot Online (APENAS PIX) com Cancelamento Automático!'));
+client.on('qr', (qr) => {
+    // qrcode.generate(qr, { small: true }); // Removido para evitar deformação no log
+    qrCodeData = qr;
+    console.log("⚠️ QR Code recebido! Acesse o link abaixo para escanear:");
+    console.log("👉 https://recupera-o-de-vendas-afbr-production.up.railway.app");
+});
+
+client.on('ready', () => {
+    console.log('✅ Bot Online (APENAS PIX) com Cancelamento Automático!');
+    qrCodeData = null; // Limpa o QR Code após conectar
+});
 
 client.on('message_create', async (msg) => {
     store.saveWppMessage(msg);
@@ -280,10 +291,56 @@ client.on('message_create', async (msg) => {
 
 client.initialize();
 
-// ======================= WEBHOOK YAMPI =======================
+// ======================= WEBHOOK YAMPI & QR CODE SERVER =======================
 const app = express();
 app.use(express.json());
 app.use(cors());
+
+// Rota para Exibir QR Code
+app.get('/', (req, res) => {
+    if (qrCodeData) {
+        // Usa API pública para renderizar o QR Code na tela sem precisar de bibliotecas extras
+        const qrImage = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrCodeData)}`;
+        
+        res.send(`
+            <!DOCTYPE html>
+            <html lang="pt-br">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>QR Code WhatsApp - AquaFit</title>
+                <style>
+                    body { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; background-color: #f0f2f5; font-family: sans-serif; }
+                    .container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); text-align: center; }
+                    h1 { color: #333; font-size: 20px; margin-bottom: 20px; }
+                    img { border: 1px solid #ddd; border-radius: 5px; }
+                    p { color: #666; margin-top: 15px; font-size: 14px; }
+                </style>
+                <meta http-equiv="refresh" content="10"> </head>
+            <body>
+                <div class="container">
+                    <h1>Escaneie o QR Code abaixo</h1>
+                    <img src="${qrImage}" alt="QR Code WhatsApp">
+                    <p>A página atualiza automaticamente a cada 10 segundos.<br>Se já conectou, aguarde o log de "Bot Online".</p>
+                </div>
+            </body>
+            </html>
+        `);
+    } else {
+        res.send(`
+            <!DOCTYPE html>
+            <html lang="pt-br">
+            <head><meta charset="UTF-8"><meta http-equiv="refresh" content="5"></head>
+            <body style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; background-color: #f0f2f5;">
+                <div style="text-align: center; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                    <h2>Aguardando QR Code ou Bot já Conectado...</h2>
+                    <p>Verifique os logs no Railway.</p>
+                </div>
+            </body>
+            </html>
+        `);
+    }
+});
 
 // Função auxiliar para encontrar o valor dentro de objetos aninhados
 const getSafe = (obj, path) => {
@@ -415,4 +472,4 @@ app.post('/webhook/yampi', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`👂 Webhook na porta ${PORT}`));
+app.listen(PORT, () => console.log(`👂 Webhook e Painel QR na porta ${PORT}`));
