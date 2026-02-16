@@ -316,12 +316,12 @@ app.get('/', (req, res) => {
                     img { border: 1px solid #ddd; border-radius: 5px; }
                     p { color: #666; margin-top: 15px; font-size: 14px; }
                 </style>
-                <meta http-equiv="refresh" content="10"> </head>
+                <meta http-equiv="refresh" content="120"> </head>
             <body>
                 <div class="container">
                     <h1>Escaneie o QR Code abaixo</h1>
                     <img src="${qrImage}" alt="QR Code WhatsApp">
-                    <p>A página atualiza automaticamente a cada 10 segundos.<br>Se já conectou, aguarde o log de "Bot Online".</p>
+                    <p>A página atualiza automaticamente a cada 2 minutos.<br>Se já conectou, aguarde o log de "Bot Online".</p>
                 </div>
             </body>
             </html>
