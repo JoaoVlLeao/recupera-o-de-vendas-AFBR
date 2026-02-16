@@ -96,6 +96,7 @@ const lidCache = new Map();
 const allowedChats = new Set(); 
 const messageBuffers = new Map();
 const pendingPixTimers = new Map(); 
+const paidOrders = new Set(); // Controle extra de pedidos pagos
 
 function loadState() {
     const data = safeReadJSON(PERSISTENCE_FILE, { conversations: {}, lidCache: {}, allowed: [] });
@@ -374,13 +375,14 @@ app.post('/webhook/yampi', async (req, res) => {
 
         // --- 1. DETECÇÃO DE PAGAMENTO REALIZADO (CANCELAMENTO DE TIMER) ---
         if (data.event === "order.paid" || (data.event === "order.updated" && resource.paid)) {
+            if (orderId) paidOrders.add(orderId); // REGISTRA QUE ESTÁ PAGO
             if (orderId && pendingPixTimers.has(orderId)) {
                 console.log(`🎉 Pagamento CONFIRMADO para Pedido ${orderId}. CANCELANDO timer de cobrança!`);
                 clearTimeout(pendingPixTimers.get(orderId));
                 pendingPixTimers.delete(orderId);
                 return res.status(200).send("Timer Cancelled");
             }
-            return res.status(200).send("Paid - No timer");
+            return res.status(200).send("Paid - Recorded");
         }
 
         // --- 2. VERIFICAÇÃO DE PEDIDO NOVO E NÃO PAGO ---
@@ -458,6 +460,14 @@ app.post('/webhook/yampi', async (req, res) => {
         res.status(200).send("Scheduled");
 
         const timer = setTimeout(async () => {
+            // VERIFICAÇÃO FINAL: Se o pedido constar na lista de pagos, cancela o envio
+            if (paidOrders.has(orderId)) {
+                console.log(`🛑 ENVIO CANCELADO para Pedido ${orderId}: Pagamento detectado durante a espera.`);
+                pendingPixTimers.delete(orderId);
+                paidOrders.delete(orderId);
+                return;
+            }
+
             pendingPixTimers.delete(orderId);
             console.log(`🚀 Executando envio para: ${dados.nome} - Tel: ${telefone}`);
 
