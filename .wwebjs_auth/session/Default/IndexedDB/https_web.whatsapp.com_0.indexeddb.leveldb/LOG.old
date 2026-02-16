@@ -1,0 +1,12 @@
+2026/02/14-13:43:05.769 1ae50 Reusing MANIFEST C:\Bot Recuperacao de Vendas - AquaFit Brasil\.wwebjs_auth\session\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/02/14-13:43:05.769 1ae50 Recovering log #30
+2026/02/14-13:43:05.775 1ae50 Reusing old log C:\Bot Recuperacao de Vendas - AquaFit Brasil\.wwebjs_auth\session\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/000030.log 
+2026/02/14-13:44:28.408 1b210 Level-0 table #35: started
+2026/02/14-13:44:28.428 1b210 Level-0 table #35: 1053640 bytes OK
+2026/02/14-13:44:28.430 1b210 Delete type=0 #30
+2026/02/14-13:44:57.094 1acb8 Compacting 1@1 + 1@2 files
+2026/02/14-13:44:57.143 1acb8 Generated table #36@1: 45720 keys, 1802512 bytes
+2026/02/14-13:44:57.143 1acb8 Compacted 1@1 + 1@2 files => 1802512 bytes
+2026/02/14-13:44:57.143 1acb8 compacted to: files[ 0 0 1 0 0 0 0 ]
+2026/02/14-13:44:57.144 1acb8 Delete type=2 #32
+2026/02/14-13:44:57.144 1acb8 Delete type=2 #35

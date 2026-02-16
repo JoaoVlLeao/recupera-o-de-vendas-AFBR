@@ -1,0 +1,5 @@
+node_modules
+.env
+.data
+bot_state.json
+wpp_store.json
