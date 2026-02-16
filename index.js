@@ -374,15 +374,25 @@ app.post('/webhook/yampi', async (req, res) => {
         const orderId = resource.id;
 
         // --- 1. DETECÇÃO DE PAGAMENTO REALIZADO (CANCELAMENTO DE TIMER) ---
-        if (data.event === "order.paid" || (data.event === "order.updated" && resource.paid)) {
-            if (orderId) paidOrders.add(orderId); // REGISTRA QUE ESTÁ PAGO
-            if (orderId && pendingPixTimers.has(orderId)) {
-                console.log(`🎉 Pagamento CONFIRMADO para Pedido ${orderId}. CANCELANDO timer de cobrança!`);
-                clearTimeout(pendingPixTimers.get(orderId));
-                pendingPixTimers.delete(orderId);
-                return res.status(200).send("Timer Cancelled");
+        // Verificamos order.paid e também order.status.updated
+        if (data.event === "order.paid" || 
+            data.event === "order.status.updated" || 
+            (data.event === "order.updated" && resource.paid)) {
+            
+            // Verifica se o status confirma o pagamento (paid ou approved) ou se resource.paid é true
+            const isPaidStatus = resource.paid === true || resource.status === 'paid' || resource.status === 'approved';
+
+            if (isPaidStatus) {
+                if (orderId) paidOrders.add(orderId); // REGISTRA QUE ESTÁ PAGO
+
+                if (orderId && pendingPixTimers.has(orderId)) {
+                    console.log(`🎉 Pagamento CONFIRMADO (Via Webhook) para Pedido ${orderId}. CANCELANDO timer de cobrança!`);
+                    clearTimeout(pendingPixTimers.get(orderId));
+                    pendingPixTimers.delete(orderId);
+                    return res.status(200).send("Timer Cancelled");
+                }
+                return res.status(200).send("Paid - Recorded");
             }
-            return res.status(200).send("Paid - Recorded");
         }
 
         // --- 2. VERIFICAÇÃO DE PEDIDO NOVO E NÃO PAGO ---
