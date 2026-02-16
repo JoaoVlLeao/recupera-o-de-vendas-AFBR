@@ -179,49 +179,54 @@ Depois que a cliente disser que já pagou, agradeça e diga que ela receberá a 
 `;
 
 async function gerarRespostaGemini(historico, dados) {
-    try {
-        const model = genAI.getGenerativeModel({ model: MODEL_NAME });
-        
-        let systemInstruction = PROMPT_PIX;
-        
-        // Garante que o valor venha formatado ou usa o cru
-        let valorFormatado = dados.valor;
+    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+    
+    // Tratamento de valor robusto para evitar R$ 0,00
+    let valorFormatado = "o valor do pedido";
+    if (dados && dados.valor) {
         if (typeof dados.valor === 'number') {
             valorFormatado = `R$ ${dados.valor.toFixed(2).replace('.', ',')}`;
+        } else {
+            valorFormatado = dados.valor.toString();
         }
+    }
 
-        let promptUsuario = `
-            Contexto PIX:
-            Cliente: ${dados.nome}
-            Valor Pedido: ${valorFormatado}
-            Link Original: ${dados.link}
-            
-            Se for a primeira mensagem, gere EXATAMENTE a "Mensagem 1" do seu roteiro, substituindo a variável {VALOR_TOTAL_PEDIDO} por ${valorFormatado}.
-            `;
+    let systemInstruction = PROMPT_PIX;
+    let promptUsuario = `
+        Contexto PIX:
+        Cliente: ${dados.nome}
+        Valor Pedido: ${valorFormatado}
+        Link Original: ${dados.link}
+        
+        Se for a primeira mensagem, gere EXATAMENTE a "Mensagem 1" do seu roteiro, substituindo a variável {VALOR_TOTAL_PEDIDO} por ${valorFormatado}.
+        `;
 
-        const chat = model.startChat({
-            history: [
-                { role: "user", parts: [{ text: `Instrução do Sistema: ${systemInstruction}` }] },
-                ...historico
-            ]
-        });
+    const chat = model.startChat({
+        history: [
+            { role: "user", parts: [{ text: `Instrução do Sistema: ${systemInstruction}` }] },
+            ...historico
+        ]
+    });
 
-        let msgEnvio = "Gere a próxima resposta.";
-        if (historico.length === 0) {
-            msgEnvio = promptUsuario;
+    let msgEnvio = "Gere a próxima resposta.";
+    if (historico.length === 0) {
+        msgEnvio = promptUsuario;
+    }
+
+    // Loop de tentativas infinitas em caso de erro (ex: 429)
+    while (true) {
+        try {
+            const result = await chat.sendMessage(msgEnvio);
+            return result.response.text();
+        } catch (error) {
+            console.error("Erro Gemini (Tentando novamente em 60s):", error.message);
+            // Aguarda 60 segundos antes de tentar novamente
+            await new Promise(resolve => setTimeout(resolve, 60000));
         }
-
-        const result = await chat.sendMessage(msgEnvio);
-        return result.response.text();
-    } catch (error) {
-        console.error("Erro Gemini:", error);
-        return "Oi! Já te respondo, só um minuto.";
     }
 }
 
 // ======================= CLIENTE WHATSAPP =======================
-let qrCodeData = null; // Variável para armazenar o QR Code atual
-
 const client = new Client({
     authStrategy: new LocalAuth({ dataPath: DATA_DIR }),
     puppeteer: {
@@ -230,17 +235,8 @@ const client = new Client({
     }
 });
 
-client.on('qr', (qr) => {
-    // qrcode.generate(qr, { small: true }); // Removido para evitar deformação no log
-    qrCodeData = qr;
-    console.log("⚠️ QR Code recebido! Acesse o link abaixo para escanear:");
-    console.log("👉 https://recupera-o-de-vendas-afbr-production.up.railway.app");
-});
-
-client.on('ready', () => {
-    console.log('✅ Bot Online (APENAS PIX) com Cancelamento Automático!');
-    qrCodeData = null; // Limpa o QR Code após conectar
-});
+client.on('qr', (qr) => qrcode.generate(qr, { small: true }));
+client.on('ready', () => console.log('✅ Bot Online (APENAS PIX) com Cancelamento Automático!'));
 
 client.on('message_create', async (msg) => {
     store.saveWppMessage(msg);
@@ -291,56 +287,10 @@ client.on('message_create', async (msg) => {
 
 client.initialize();
 
-// ======================= WEBHOOK YAMPI & QR CODE SERVER =======================
+// ======================= WEBHOOK YAMPI =======================
 const app = express();
 app.use(express.json());
 app.use(cors());
-
-// Rota para Exibir QR Code
-app.get('/', (req, res) => {
-    if (qrCodeData) {
-        // Usa API pública para renderizar o QR Code na tela sem precisar de bibliotecas extras
-        const qrImage = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrCodeData)}`;
-        
-        res.send(`
-            <!DOCTYPE html>
-            <html lang="pt-br">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>QR Code WhatsApp - AquaFit</title>
-                <style>
-                    body { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; background-color: #f0f2f5; font-family: sans-serif; }
-                    .container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); text-align: center; }
-                    h1 { color: #333; font-size: 20px; margin-bottom: 20px; }
-                    img { border: 1px solid #ddd; border-radius: 5px; }
-                    p { color: #666; margin-top: 15px; font-size: 14px; }
-                </style>
-                <meta http-equiv="refresh" content="120"> </head>
-            <body>
-                <div class="container">
-                    <h1>Escaneie o QR Code abaixo</h1>
-                    <img src="${qrImage}" alt="QR Code WhatsApp">
-                    <p>A página atualiza automaticamente a cada 2 minutos.<br>Se já conectou, aguarde o log de "Bot Online".</p>
-                </div>
-            </body>
-            </html>
-        `);
-    } else {
-        res.send(`
-            <!DOCTYPE html>
-            <html lang="pt-br">
-            <head><meta charset="UTF-8"><meta http-equiv="refresh" content="5"></head>
-            <body style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; background-color: #f0f2f5;">
-                <div style="text-align: center; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
-                    <h2>Aguardando QR Code ou Bot já Conectado...</h2>
-                    <p>Verifique os logs no Railway.</p>
-                </div>
-            </body>
-            </html>
-        `);
-    }
-});
 
 // Função auxiliar para encontrar o valor dentro de objetos aninhados
 const getSafe = (obj, path) => {
@@ -427,13 +377,15 @@ app.post('/webhook/yampi', async (req, res) => {
         const itemsList = getSafe(resource, "items.data") || resource.items || [];
         const produtosStr = Array.isArray(itemsList) ? itemsList.map(i => i.product_name || getSafe(i, "sku.data.title") || "Produto").join(", ") : "Produtos";
 
+        // Tenta pegar o valor de todos os lugares possíveis para evitar 0
+        const valorBruto = resource.total_price || resource.value_total || getSafe(resource, "totalizers.total") || 0;
+
         const dados = {
             nome: nomeCliente,
             tipo: "Pix Pendente",
             produtos: produtosStr,
             link: resource.checkout_url || resource.status_url || "",
-            // Garante que pegamos o valor total, seja direto ou em totalizers
-            valor: resource.total_price || getSafe(resource, "totalizers.total") || 0
+            valor: valorBruto
         };
 
         // --- 5. AGENDAMENTO DO ENVIO (15 MIN) ---
@@ -472,4 +424,4 @@ app.post('/webhook/yampi', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`👂 Webhook e Painel QR na porta ${PORT}`));
+app.listen(PORT, () => console.log(`👂 Webhook na porta ${PORT}`));
