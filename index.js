@@ -25,7 +25,7 @@ const STORE_FILE = path.join(DATA_DIR, "wpp_store.json");
 
 // ======================= GEMINI SETUP =======================
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const MODEL_NAME = "gemini-2.0-flash"; 
+const MODEL_NAME = "gemini-2.5-flash"; 
 
 // ======================= STORE LOCAL =======================
 function makeLocalInMemoryStore() {
