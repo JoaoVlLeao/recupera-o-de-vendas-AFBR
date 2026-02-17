@@ -25,7 +25,7 @@ const STORE_FILE = path.join(DATA_DIR, "wpp_store.json");
 
 // ======================= GEMINI SETUP =======================
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const MODEL_NAME = "gemini-2.5-flash"; 
+const MODEL_NAME = "gemini-2.0-flash"; 
 
 // ======================= STORE LOCAL =======================
 function makeLocalInMemoryStore() {
@@ -371,27 +371,32 @@ app.post('/webhook/yampi', async (req, res) => {
         console.log("📥 Evento:", data.event); 
 
         const resource = data.resource || {};
-        const orderId = resource.id;
+        // IMPORTANTE: Converter ID para string para evitar erro de tipo (número vs texto) no Map
+        const orderId = resource.id ? String(resource.id) : null;
 
         // --- 1. DETECÇÃO DE PAGAMENTO REALIZADO (CANCELAMENTO DE TIMER) ---
-        // Verificamos order.paid e também order.status.updated
         if (data.event === "order.paid" || 
             data.event === "order.status.updated" || 
             (data.event === "order.updated" && resource.paid)) {
             
-            // Verifica se o status confirma o pagamento (paid ou approved) ou se resource.paid é true
-            const isPaidStatus = resource.paid === true || resource.status === 'paid' || resource.status === 'approved';
+            const status = resource.status ? String(resource.status).toLowerCase() : '';
+            
+            // Se o status contém "waiting", "pending" ou "aguardando", ele AINDA não está pago.
+            // Qualquer outra coisa (paid, approved, shipped, canceled) consideramos como resolvido.
+            const isStillPending = status.includes('pending') || status.includes('waiting') || status.includes('aguardando');
 
-            if (isPaidStatus) {
-                if (orderId) paidOrders.add(orderId); // REGISTRA QUE ESTÁ PAGO
+            // LÓGICA: Se pagou (paid=true) OU se o status mudou para algo que NÃO é pendente
+            if (resource.paid === true || (!isStillPending && status !== '')) {
+                
+                if (orderId) paidOrders.add(orderId); // REGISTRA QUE ESTÁ RESOLVIDO/PAGO
 
                 if (orderId && pendingPixTimers.has(orderId)) {
-                    console.log(`🎉 Pagamento CONFIRMADO (Via Webhook) para Pedido ${orderId}. CANCELANDO timer de cobrança!`);
+                    console.log(`🎉 Atualização de Status (${status}) para Pedido ${orderId}. CANCELANDO timer!`);
                     clearTimeout(pendingPixTimers.get(orderId));
                     pendingPixTimers.delete(orderId);
                     return res.status(200).send("Timer Cancelled");
                 }
-                return res.status(200).send("Paid - Recorded");
+                return res.status(200).send("Status Updated - Recorded");
             }
         }
 
@@ -461,7 +466,6 @@ app.post('/webhook/yampi', async (req, res) => {
             tipo: "Pix Pendente",
             produtos: produtosStr,
             link: resource.checkout_url || resource.status_url || "",
-            // CORREÇÃO AQUI: Adicionado resource.value_total que é o campo correto no seu payload
             valor: resource.value_total || resource.total_price || getSafe(resource, "totalizers.total") || 0
         };
 
@@ -470,15 +474,15 @@ app.post('/webhook/yampi', async (req, res) => {
         res.status(200).send("Scheduled");
 
         const timer = setTimeout(async () => {
-            // VERIFICAÇÃO FINAL: Se o pedido constar na lista de pagos, cancela o envio
-            if (paidOrders.has(orderId)) {
+            // VERIFICAÇÃO FINAL: Se o pedido constar na lista de pagos (como String), cancela o envio
+            if (orderId && paidOrders.has(orderId)) {
                 console.log(`🛑 ENVIO CANCELADO para Pedido ${orderId}: Pagamento detectado durante a espera.`);
                 pendingPixTimers.delete(orderId);
                 paidOrders.delete(orderId);
                 return;
             }
 
-            pendingPixTimers.delete(orderId);
+            if(orderId) pendingPixTimers.delete(orderId);
             console.log(`🚀 Executando envio para: ${dados.nome} - Tel: ${telefone}`);
 
             const conv = ensureConversation(systemKey);
